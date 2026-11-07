@@ -21,6 +21,7 @@ import { PomodoroTimer } from '@/components/PomodoroTimer';
 import { BilgeTonyu } from '@/components/BilgeTonyu';
 import { AuthModal } from '@/components/AuthModal';
 import { SupabaseModal } from '@/components/SupabaseModal';
+import { LandingPage } from '@/components/LandingPage';
 import { getSupabaseClient, isSupabaseConfigured } from '@/utils/supabaseClient';
 import { soundAlert } from '@/utils/sound';
 
@@ -38,6 +39,7 @@ export default function Home() {
 
   // Kullanıcı Hesabı & Profil
   const [username, setUsername] = useState<string | null>(null);
+  const [inApp, setInApp] = useState<boolean>(false);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState<boolean>(false);
   const [showSupabaseModal, setShowSupabaseModal] = useState<boolean>(false);
@@ -76,9 +78,11 @@ export default function Home() {
       if (savedUser) {
         setUsername(savedUser);
         loadUserData(savedUser);
+        // Önceden giriş yapılmışsa doğrudan kokpite al
+        setInApp(true);
       } else {
-        // İlk kez giriyorsa profil oluşturma modalını aç
-        setShowAuthModal(true);
+        // Yeni ziyaretçide landing page gösterilir, 'Uygulamayı Aç' denince modal açılır
+        setInApp(false);
       }
     } catch (e) {
       console.error('Başlangıç hatası:', e);
@@ -543,6 +547,35 @@ export default function Home() {
     return <div className="min-h-screen bg-[#090a0b] text-zinc-400 flex items-center justify-center text-xs font-mono">Life OS Yükleniyor...</div>;
   }
 
+  // Eğer kullanıcı kokpite henüz girmemişse kurumsal karşılama (Landing Page) sayfasını göster
+  if (!inApp) {
+    return (
+      <>
+        {showAuthModal && (
+          <AuthModal
+            currentUsername={username}
+            onLogin={(u) => {
+              handleLogin(u);
+              setInApp(true);
+            }}
+            allowClose={true}
+            onClose={() => setShowAuthModal(false)}
+          />
+        )}
+        <LandingPage
+          currentUser={username}
+          onEnterApp={() => {
+            if (username) {
+              setInApp(true);
+            } else {
+              setShowAuthModal(true);
+            }
+          }}
+        />
+      </>
+    );
+  }
+
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'dashboard', label: 'Ana Panel', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'tasks', label: 'Görev & Alışkanlık', icon: <CheckSquare className="w-4 h-4" />, badge: tasks.filter(t => !t.completed).length },
@@ -612,15 +645,19 @@ export default function Home() {
         <div className="space-y-4">
           {/* Logo & Marka & Tema */}
           <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-zinc-800 dark:border-zinc-700/80 flex items-center justify-center text-white">
+            <button 
+              onClick={() => setInApp(false)}
+              className="flex items-center gap-2.5 text-left group"
+              title="Karşılama Sayfasına Dön"
+            >
+              <div className="w-8 h-8 rounded-xl bg-zinc-900 dark:bg-zinc-800 border border-zinc-800 dark:border-zinc-700/80 flex items-center justify-center text-white group-hover:scale-105 transition-transform">
                 <Zap className="w-4 h-4" />
               </div>
               <div>
-                <span className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-100 block">LIFE OS</span>
+                <span className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-100 block group-hover:text-zinc-500 transition-colors">LIFE OS</span>
                 <span className="text-[10px] text-zinc-500 font-mono">Kişisel Kokpit</span>
               </div>
-            </div>
+            </button>
 
             {/* Tema Geçişi */}
             <button
