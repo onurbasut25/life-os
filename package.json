@@ -1,14 +1,37 @@
 {
   "name": "life-os",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
+  "main": "electron-main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "desktop:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "desktop:start": "electron .",
+    "desktop:dist": "next build && electron-builder --mac",
+    "mobile:build": "next build && npx cap sync",
+    "mobile:open:ios": "npx cap open ios",
+    "mobile:open:android": "npx cap open android"
+  },
+  "build": {
+    "appId": "com.lifeos.desktop",
+    "productName": "Life OS",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
   },
   "dependencies": {
+    "@capacitor/core": "^8.6.0",
+    "@supabase/supabase-js": "^2.119.0",
     "@types/canvas-confetti": "^1.9.0",
     "canvas-confetti": "^1.9.4",
     "lucide-react": "^1.70.0",
@@ -17,19 +40,24 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/ios": "^8.6.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.6",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vercel": "^65.12.1"
+    "vercel": "^65.12.1",
+    "wait-on": "^9.5.1"
   },
-  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
-  "main": "index.js",
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "description": "Life OS - Bütünsel Yaşam & Gelişim Yönetim Sistemi",
+  "author": "Onur Alp Basut",
+  "license": "MIT"
 }

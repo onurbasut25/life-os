@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, CheckSquare, Dumbbell, Timer, BookOpen,
-  Smartphone, RefreshCw, Zap, Moon, Sun, User, LogOut, Trash2, CheckCircle2, ShieldAlert
+  Smartphone, RefreshCw, Zap, Moon, Sun, User, LogOut, Trash2, CheckCircle2, ShieldAlert, Database
 } from 'lucide-react';
 import { 
   Task, TaskCategory, Habit, WorkoutSession, PomodoroSession, 
@@ -20,6 +20,8 @@ import { WorkoutTracker } from '@/components/WorkoutTracker';
 import { PomodoroTimer } from '@/components/PomodoroTimer';
 import { BilgeTonyu } from '@/components/BilgeTonyu';
 import { AuthModal } from '@/components/AuthModal';
+import { SupabaseModal } from '@/components/SupabaseModal';
+import { getSupabaseClient, isSupabaseConfigured } from '@/utils/supabaseClient';
 import { soundAlert } from '@/utils/sound';
 
 type Tab = 'dashboard' | 'tasks' | 'workouts' | 'pomodoro' | 'bilge';
@@ -38,6 +40,8 @@ export default function Home() {
   const [username, setUsername] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState<boolean>(false);
+  const [showSupabaseModal, setShowSupabaseModal] = useState<boolean>(false);
+  const [isSupabaseLive, setIsSupabaseLive] = useState<boolean>(false);
 
   // Veri Durumları
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
@@ -64,6 +68,9 @@ export default function Home() {
       setTheme(savedTheme);
       applyTheme(savedTheme);
 
+      // Supabase kontrolü
+      setIsSupabaseLive(isSupabaseConfigured());
+
       // Kullanıcı hesabı
       const savedUser = localStorage.getItem(USERNAME_KEY);
       if (savedUser) {
@@ -77,6 +84,45 @@ export default function Home() {
       console.error('Başlangıç hatası:', e);
     }
   }, []);
+
+  // Supabase Gerçek Zamanlı (WebSocket) Dinleme
+  useEffect(() => {
+    if (!username) return;
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const channel = client
+      .channel(`life-os-sync-${username}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'life_os_state',
+          filter: `username=eq.${username}`,
+        },
+        (payload: any) => {
+          if (payload.new && payload.new.data) {
+            console.log('⚡ Supabase WebSocket canlı veri alındı:', payload.new.updated_at);
+            populateState(payload.new.data);
+            if (typeof window !== 'undefined') {
+              const localKey = `LIFE_OS_DATA_${username.toLowerCase()}`;
+              localStorage.setItem(localKey, JSON.stringify(payload.new.data));
+            }
+            setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsSupabaseLive(true);
+        }
+      });
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  }, [username]);
 
   const applyTheme = (t: 'dark' | 'light') => {
     if (t === 'dark') {
@@ -112,7 +158,30 @@ export default function Home() {
       console.warn('LocalStorage okunamadı:', e);
     }
 
-    // 2. Ardından sunucudaki güncel bulut verisini çekip eşle
+    // 2. Supabase varsa önce direkt Supabase'den çek
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        setIsSyncing(true);
+        const { data, error } = await supabase
+          .from('life_os_state')
+          .select('data, updated_at')
+          .eq('username', userKey)
+          .single();
+
+        if (data && data.data && !error) {
+          populateState(data.data);
+          localStorage.setItem(localKey, JSON.stringify(data.data));
+          setIsSyncing(false);
+          setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          return;
+        }
+      } catch (e) {
+        console.warn('Supabase fetch offline/hata:', e);
+      }
+    }
+
+    // 3. Ardından yerel API'deki güncel bulut verisini çekip eşle
     try {
       setIsSyncing(true);
       const res = await fetch(`/api/data?username=${encodeURIComponent(userKey)}`);
@@ -193,6 +262,24 @@ export default function Home() {
   };
 
   const pushToCloud = async (userKey: string, data: any) => {
+    // A) Supabase Bulut DB (Varsa anında WebSocket ile diğer cihazlara yayınlar)
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase
+          .from('life_os_state')
+          .upsert({
+            username: userKey,
+            data,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'username' });
+        setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      } catch (err) {
+        console.warn('Supabase upsert hatası:', err);
+      }
+    }
+
+    // B) Dahili API Yedeklemesi
     try {
       const res = await fetch('/api/data', {
         method: 'POST',
@@ -477,6 +564,13 @@ export default function Home() {
         />
       )}
 
+      {/* Supabase Bulut Veritabanı Modalı */}
+      <SupabaseModal
+        isOpen={showSupabaseModal}
+        onClose={() => setShowSupabaseModal(false)}
+        onSaved={() => setIsSupabaseLive(isSupabaseConfigured())}
+      />
+
       {/* TÜM VERİLERİ SİLME ONAY MODALI */}
       {showClearConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
@@ -539,7 +633,7 @@ export default function Home() {
           </div>
 
           {/* Aktif Hesap & Senkronizasyon Durumu */}
-          <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 space-y-2">
+          <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 space-y-2.5">
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setShowAuthModal(true)}
@@ -567,6 +661,20 @@ export default function Home() {
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>
+
+            {/* Supabase Bulut Durumu & Ayar Butonu */}
+            <button
+              onClick={() => setShowSupabaseModal(true)}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700/60 transition-colors border border-zinc-200/60 dark:border-zinc-700/50 text-[11px]"
+            >
+              <div className="flex items-center gap-1.5">
+                <Database className="w-3 h-3 text-emerald-500" />
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                  {isSupabaseLive ? 'Supabase Live' : 'Supabase Bağla'}
+                </span>
+              </div>
+              <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseLive ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+            </button>
 
             {lastSyncTime && (
               <p className="text-[10px] text-zinc-400 font-mono">Son senkron: {lastSyncTime}</p>
@@ -641,6 +749,17 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSupabaseModal(true)}
+              className={`p-1.5 rounded-lg border transition-colors ${
+                isSupabaseLive 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' 
+                  : 'bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500'
+              }`}
+              title="Supabase Bulut Durumu"
+            >
+              <Database className="w-3.5 h-3.5" />
+            </button>
             <button
               onClick={() => setShowClearConfirmModal(true)}
               className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50"
