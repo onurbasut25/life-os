@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, CheckSquare, Dumbbell, Timer, BookOpen,
-  Smartphone, RefreshCw, Zap, Moon, Sun, User, LogOut, Trash2, CheckCircle2, ShieldAlert, Database
+  Smartphone, RefreshCw, Zap, Moon, Sun, User, LogOut, Trash2, CheckCircle2, ShieldAlert
 } from 'lucide-react';
 import { 
   Task, TaskCategory, Habit, WorkoutSession, PomodoroSession, 
@@ -20,7 +20,6 @@ import { WorkoutTracker } from '@/components/WorkoutTracker';
 import { PomodoroTimer } from '@/components/PomodoroTimer';
 import { BilgeTonyu } from '@/components/BilgeTonyu';
 import { AuthModal } from '@/components/AuthModal';
-import { SupabaseModal } from '@/components/SupabaseModal';
 import { LandingPage } from '@/components/LandingPage';
 import { getSupabaseClient, isSupabaseConfigured } from '@/utils/supabaseClient';
 import { soundAlert } from '@/utils/sound';
@@ -42,8 +41,6 @@ export default function Home() {
   const [inApp, setInApp] = useState<boolean>(false);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState<boolean>(false);
-  const [showSupabaseModal, setShowSupabaseModal] = useState<boolean>(false);
-  const [isSupabaseLive, setIsSupabaseLive] = useState<boolean>(false);
 
   // Veri Durumları
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
@@ -69,9 +66,6 @@ export default function Home() {
       const savedTheme = (localStorage.getItem(THEME_KEY) as 'dark' | 'light') || 'dark';
       setTheme(savedTheme);
       applyTheme(savedTheme);
-
-      // Supabase kontrolü
-      setIsSupabaseLive(isSupabaseConfigured());
 
       // Kullanıcı hesabı
       const savedUser = localStorage.getItem(USERNAME_KEY);
@@ -117,11 +111,7 @@ export default function Home() {
           }
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          setIsSupabaseLive(true);
-        }
-      });
+      .subscribe();
 
     return () => {
       client.removeChannel(channel);
@@ -597,13 +587,6 @@ export default function Home() {
         />
       )}
 
-      {/* Supabase Bulut Veritabanı Modalı */}
-      <SupabaseModal
-        isOpen={showSupabaseModal}
-        onClose={() => setShowSupabaseModal(false)}
-        onSaved={() => setIsSupabaseLive(isSupabaseConfigured())}
-      />
-
       {/* TÜM VERİLERİ SİLME ONAY MODALI */}
       {showClearConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
@@ -699,20 +682,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Supabase Bulut Durumu & Ayar Butonu */}
-            <button
-              onClick={() => setShowSupabaseModal(true)}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700/60 transition-colors border border-zinc-200/60 dark:border-zinc-700/50 text-[11px]"
-            >
-              <div className="flex items-center gap-1.5">
-                <Database className="w-3 h-3 text-emerald-500" />
-                <span className="font-medium text-zinc-700 dark:text-zinc-300">
-                  {isSupabaseLive ? 'Supabase Live' : 'Supabase Bağla'}
-                </span>
-              </div>
-              <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseLive ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
-            </button>
-
             {lastSyncTime && (
               <p className="text-[10px] text-zinc-400 font-mono">Son senkron: {lastSyncTime}</p>
             )}
@@ -786,17 +755,6 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSupabaseModal(true)}
-              className={`p-1.5 rounded-lg border transition-colors ${
-                isSupabaseLive 
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' 
-                  : 'bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500'
-              }`}
-              title="Supabase Bulut Durumu"
-            >
-              <Database className="w-3.5 h-3.5" />
-            </button>
             <button
               onClick={() => setShowClearConfirmModal(true)}
               className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50"
